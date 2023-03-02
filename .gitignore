@@ -36,7 +36,7 @@ __pycache__/
 .env
 .Python
 env/
-static/
+
 build/
 develop-eggs/
 dist/

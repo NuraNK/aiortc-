@@ -1,0 +1,73 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Chat</title>
+</head>
+<body>
+    <div id="videos"></div>
+
+    <script>
+        let roomName = '1';
+        let pc = new RTCPeerConnection();
+        let ws = new WebSocket(`ws://localhost:8000/ws/${roomName}`);
+
+        ws.onopen = () => {
+            console.log('Connected to WebSocket server');
+        };
+
+        ws.onmessage = async (event) => {
+            let message = event.data;
+            console.log(`Received message: ${message}`);
+
+            if (message.startsWith('OFFER')) {
+                // Set remote description from offer
+                let offer = new RTCSessionDescription({sdp: message, type: 'offer'});
+                await pc.setRemoteDescription(offer);
+
+                // Create answer and send to server
+                let answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send(answer.sdp);
+            } else if (message.startsWith('ANSWER')) {
+                // Set remote description from answer
+                let answer = new RTCSessionDescription({sdp: message, type: 'answer'});
+                await pc.setRemoteDescription(answer);
+            } else if (message.startsWith('CANDIDATE')) {
+                // Add ICE candidate
+                let candidate = new RTCIceCandidate({sdp: message});
+                await pc.addIceCandidate(candidate);
+            } else {
+                // Display new video stream
+                let video = document.createElement('video');
+                video.srcObject = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+                video.play();
+                document.querySelector('#videos').appendChild(video);
+
+                // Add new track to peer connection
+                let sender = pc.addTrack(video.srcObject.getTracks()[0], video.srcObject);
+                let offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                ws.send(offer.sdp);
+            }
+        };
+
+        navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(stream => {
+            let video = document.createElement('video');
+            video.srcObject = stream;
+            video.play();
+            document.querySelector('#videos').appendChild(video);
+
+            // Add user's tracks to peer connection
+            stream.getTracks().forEach(track => {
+                pc.addTrack(track, stream);
+            });
+
+            // Create offer and send to server
+            let offer = pc.createOffer();
+            pc.setLocalDescription(offer);
+            ws.send(offer.sdp);
+        });
+    </script>
+</body>
+</html>
